@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo - Librería Lerner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cream: #F7F3EC;
+      --ink: #1C1A14;
+      --ink-light: #5A5647;
+      --ink-faint: #9A9385;
+      --gold: #B8860B;
+      --gold-light: #F5EDD4;
+      --gold-border: #D4B87A;
+      --red: #8B2222;
+      --red-light: #F5E8E8;
+      --green: #1B4D35;
+      --green-light: #E8F2EC;
+      --border: #E0D9CC;
+      --surface: #FFFFFF;
+      --radius: 6px;
+      --radius-lg: 12px;
+    }
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* Header fijo con logo y campo de búsqueda */
+    .header {
+      background: var(--ink);
+      padding: 0.75rem 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .header img { height: 30px; width: auto; filter: brightness(0) invert(1); opacity: 0.9; }
+    .header-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      font-style: italic;
+    }
+    .search-wrap { position: relative; }
+    .search-wrap i {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      font-size: 16px; color: rgba(255,255,255,0.4); pointer-events: none;
+    }
+    #search-input {
+      width: 100%;
+      padding: 11px 12px 11px 38px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 16px; /* 16px evita zoom en iOS */
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #search-input::placeholder { color: rgba(255,255,255,0.35); }
+    #search-input:focus { border-color: var(--gold-border); background: rgba(255,255,255,0.14); }
+
+    /* Main */
+    .main { padding: 1rem; max-width: 900px; margin: 0 auto; }
+
+    /* Estado inicial */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+    }
+    .empty-icon { font-size: 48px; color: var(--ink-faint); margin-bottom: 12px; opacity: 0.4; }
+    .empty-title { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--ink-light); margin-bottom: 6px; }
+    .empty-sub { font-size: 13px; color: var(--ink-faint); }
+
+    #status { font-size: 13px; color: var(--ink-faint); text-align: center; padding: 8px 0; min-height: 24px; }
+
+    /* Resultados */
+    #results { display: none; }
+    .results-header {
+      display: flex; align-items: baseline; gap: 8px;
+      margin-bottom: 0.75rem; padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .results-count { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--ink); }
+    .results-query { font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
+    /* Tarjetas */
+    .book-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 10px;
+      transition: box-shadow 0.2s;
+      animation: fadeUp 0.25s ease both;
+    }
+    .book-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+    .book-cover {
+      width: 72px;
+      min-height: 108px;
+      flex-shrink: 0;
+      background: var(--gold-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+    .book-cover img { width: 100%; height: 100%; object-fit: cover; }
+    .book-cover-placeholder {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 4px; padding: 10px 6px; text-align: center;
+    }
+    .book-cover-placeholder i { font-size: 22px; color: var(--gold); opacity: 0.5; }
+    .book-cover-placeholder span { font-size: 8px; color: var(--ink-faint); line-height: 1.3; }
+
+    .book-body { flex: 1; padding: 12px 14px; min-width: 0; }
+
+    .book-meta-top {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 6px; margin-bottom: 3px;
+    }
+    .book-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px; font-weight: 600;
+      color: var(--ink); line-height: 1.3; flex: 1;
+    }
+    .book-title.agotado { color: var(--ink-light); }
+
+    .stock-tag {
+      flex-shrink: 0; font-size: 10px; font-weight: 500;
+      padding: 2px 7px; border-radius: 20px; white-space: nowrap;
+    }
+    .stock-tag.disponible { background: var(--green-light); color: var(--green); }
+    .stock-tag.bajo { background: var(--gold-light); color: var(--gold); }
+    .stock-tag.agotado { background: var(--red-light); color: var(--red); }
+
+    .book-author { font-size: 12px; color: var(--ink-light); margin-bottom: 4px; }
+    .book-editorial { font-size: 11px; color: var(--ink-faint); margin-bottom: 6px; }
+    .book-synopsis {
+      font-size: 12px; color: var(--ink-light); line-height: 1.6;
+      margin-bottom: 8px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .book-footer {
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 6px; flex-wrap: wrap;
+    }
+    .book-price {
+      font-family: 'Playfair Display', serif;
+      font-size: 17px; color: var(--green); font-weight: 600;
+    }
+    .book-price.agotado { color: var(--ink-faint); }
+    .book-sedes { display: flex; flex-wrap: wrap; gap: 3px; }
+    .sede-chip {
+      font-size: 10px; padding: 2px 6px; border-radius: 20px;
+      border: 1px solid var(--border); color: var(--ink-light); background: var(--cream);
+    }
+    .book-extra {
+      display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap;
+    }
+    .book-extra span {
+      font-size: 11px; color: var(--ink-faint);
+      display: flex; align-items: center; gap: 3px;
+    }
+
+    /* Sin resultados */
+    #no-results {
+      display: none; text-align: center; padding: 3rem 1rem;
+    }
+    #no-results i { font-size: 36px; color: var(--ink-faint); opacity: 0.3; display: block; margin-bottom: 10px; }
+    #no-results p { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--ink-light); }
+    #no-results small { font-size: 13px; color: var(--ink-faint); }
+
+    .footer { text-align: center; padding: 2rem 0 1rem; font-size: 11px; color: var(--ink-faint); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <img src="data:image/png;base64,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" alt="Librería Lerner" />
+    <span class="header-title">Catálogo</span>
+  </div>
+  <div class="search-wrap">
+    <i class="ti ti-search"></i>
+    <input id="search-input" type="text" placeholder="Título, autor o temática..." autocomplete="off" autocorrect="off" autocapitalize="off" />
+  </div>
+</div>
+
+<div class="main">
+  <div id="status"></div>
+
+  <div class="empty-state" id="empty-state">
+    <div class="empty-icon"><i class="ti ti-books"></i></div>
+    <div class="empty-title">Catálogo Librería Lerner</div>
+    <div class="empty-sub">Escribe el título, autor o temática para buscar</div>
+  </div>
+
+  <div id="results">
+    <div class="results-header">
+      <span class="results-count" id="results-count"></span>
+      <span class="results-query" id="results-query"></span>
+    </div>
+    <div id="results-list"></div>
+  </div>
+
+  <div id="no-results">
+    <i class="ti ti-book-off"></i>
+    <p>Sin resultados</p>
+    <small>Intenta con otras palabras</small>
+  </div>
+
+  <div class="footer">Catálogo sincronizado desde Google Sheets</div>
+</div>
+
+<script>
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQ_qp9KAm1Augwa00PtLN0bfayFugg3bEeQ-UYwFNu-VPLV5NsaJi3vqrkKk-4q4N0Sri5d1rFCoE-/pub?output=csv";
+const GOOGLE_BOOKS = "https://www.googleapis.com/books/v1/volumes?q=isbn:";
+
+let catalog = [];
+let loaded = false;
+let searchTimer = null;
+let bookCache = {};
+
+// ── Parser ──────────────────────────────────────────────────
+function splitRow(row, sep) {
+  if (sep === '\t') return row.split('\t').map(c => c.trim().replace(/"/g, ''));
+  const cols = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i];
+    if (ch === '"') { if (inQ && row[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const sep = lines[0].includes('\t') ? '\t' : ',';
+  const headers = splitRow(lines[0], sep).map(h => h.trim());
+  const idx = {
+    isbn: headers.findIndex(h => h === 'ISBN'),
+    lerner: headers.findIndex(h => h === 'Codigo Lerner'),
+    titulo: headers.findIndex(h => h === 'Titulo'),
+    autor: headers.findIndex(h => h === 'Autor'),
+    editorial: headers.findIndex(h => h === 'Editorial'),
+    tematica: headers.findIndex(h => h === 'Tematica'),
+    precio: headers.findIndex(h => h === 'Precio'),
+    ubicacion: headers.findIndex(h => h === 'Ubicacion'),
+    saldo: headers.findIndex(h => h === 'Saldo'),
+  };
+
+  const books = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols = splitRow(lines[i], sep);
+    if (!cols[0]) continue;
+    const isbn = cols[idx.isbn] || '';
+    if (!isbn) continue;
+    const ubicacion = cols[idx.ubicacion] || '';
+    const saldo = parseInt(cols[idx.saldo] || '0') || 0;
+    if (!books[isbn]) {
+      books[isbn] = {
+        isbn,
+        titulo: cols[idx.titulo] || '',
+        autor: cols[idx.autor] || '',
+        editorial: cols[idx.editorial] || '',
+        tematica: cols[idx.tematica] || '',
+        precio: parseInt((cols[idx.precio] || '0').replace(/\D/g, '')) || 0,
+        sedes: [], totalSaldo: 0,
+      };
+    }
+    if (ubicacion) { books[isbn].sedes.push({ ubicacion, saldo }); books[isbn].totalSaldo += saldo; }
+  }
+  catalog = Object.values(books);
+}
+
+async function loadCatalog() {
+  document.getElementById('status').textContent = 'Cargando catálogo...';
+  try {
+    const resp = await fetch(SHEET_URL);
+    if (!resp.ok) throw new Error();
+    parseCSV(await resp.text());
+    loaded = true;
+    document.getElementById('status').textContent = '';
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error al cargar el catálogo.';
+  }
+}
+loadCatalog();
+
+// ── Google Books ────────────────────────────────────────────
+async function fetchBookInfo(isbn) {
+  if (bookCache[isbn] !== undefined) return bookCache[isbn];
+  bookCache[isbn] = null;
+  try {
+    const resp = await fetch(GOOGLE_BOOKS + isbn + '&maxResults=1');
+    const data = await resp.json();
+    if (data.items && data.items.length > 0) {
+      const info = data.items[0].volumeInfo;
+      bookCache[isbn] = {
+        synopsis: info.description || '',
+        cover: info.imageLinks ? info.imageLinks.thumbnail.replace('http:', 'https:') : null,
+        pages: info.pageCount || null,
+        year: info.publishedDate ? info.publishedDate.substring(0, 4) : null,
+      };
+    }
+  } catch(e) {}
+  return bookCache[isbn];
+}
+
+// ── Búsqueda difusa ─────────────────────────────────────────
+function normalize(str) {
+  return str.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ');
+}
+
+// Distancia de Levenshtein simplificada para palabras cortas
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      matrix[i][j] = b[i-1] === a[j-1]
+        ? matrix[i-1][j-1]
+        : Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function fuzzyMatch(term, text) {
+  // Coincidencia exacta primero
+  if (text.includes(term)) return true;
+  // Para términos largos, permitir errores proporcionales
+  if (term.length < 4) return false;
+  const maxDist = term.length <= 6 ? 1 : term.length <= 9 ? 2 : 3;
+  const words = text.split(' ');
+  return words.some(word => {
+    if (Math.abs(word.length - term.length) > maxDist) return false;
+    return levenshtein(term, word) <= maxDist;
+  });
+}
+
+function search(query) {
+  const terms = normalize(query).split(/\s+/).filter(t => t.length > 1);
+  if (terms.length === 0) return [];
+  return catalog.filter(book => {
+    const haystack = normalize(book.titulo + ' ' + book.autor + ' ' + book.tematica + ' ' + book.editorial);
+    return terms.every(t => fuzzyMatch(t, haystack));
+  });
+}
+
+// ── Render ──────────────────────────────────────────────────
+function fmtPrice(n) { return '$ ' + n.toLocaleString('es-CO'); }
+
+function stockInfo(book) {
+  if (book.totalSaldo <= 0) return { label: 'Agotado', cls: 'agotado' };
+  if (book.totalSaldo <= 3) return { label: `Stock bajo: ${book.totalSaldo}`, cls: 'bajo' };
+  return { label: `En stock: ${book.totalSaldo}`, cls: 'disponible' };
+}
+
+async function renderResults(books) {
+  const list = document.getElementById('results-list');
+  const stocks = books.map(b => stockInfo(b));
+
+  list.innerHTML = books.map((book, i) => {
+    const s = stocks[i];
+    const sedes = book.sedes.filter(sd => sd.saldo > 0)
+      .map(sd => `<span class="sede-chip">${sd.ubicacion}</span>`).join('');
+    return `
+      <div class="book-card" style="animation-delay:${i * 35}ms">
+        <div class="book-cover" id="cover-${i}">
+          <div class="book-cover-placeholder">
+            <i class="ti ti-book-2"></i>
+            <span>${book.editorial}</span>
+          </div>
+        </div>
+        <div class="book-body">
+          <div class="book-meta-top">
+            <div class="book-title ${s.cls === 'agotado' ? 'agotado' : ''}">${book.titulo}</div>
+            <span class="stock-tag ${s.cls}">${s.label}</span>
+          </div>
+          <div class="book-author">${book.autor}</div>
+          <div class="book-editorial">${book.editorial} · ${book.tematica}</div>
+          <div class="book-synopsis" id="synopsis-${i}"></div>
+          <div class="book-footer">
+            <span class="book-price ${s.cls === 'agotado' ? 'agotado' : ''}">${fmtPrice(book.precio)}</span>
+            <div class="book-sedes">${sedes}</div>
+          </div>
+          <div class="book-extra" id="extra-${i}"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Cargar portadas y sinopsis asincrónicamente
+  books.forEach(async (book, i) => {
+    if (!book.isbn) return;
+    const info = await fetchBookInfo(book.isbn);
+    if (!info) return;
+    if (info.cover) {
+      const el = document.getElementById(`cover-${i}`);
+      if (el) el.innerHTML = `<img src="${info.cover}" alt="${book.titulo}" loading="lazy" />`;
+    }
+    if (info.synopsis) {
+      const el = document.getElementById(`synopsis-${i}`);
+      if (el) el.textContent = info.synopsis;
+    }
+    const extraEl = document.getElementById(`extra-${i}`);
+    if (extraEl) {
+      let extras = '';
+      if (info.pages) extras += `<span><i class="ti ti-file-text" style="font-size:11px"></i> ${info.pages} págs.</span>`;
+      if (info.year)  extras += `<span><i class="ti ti-calendar" style="font-size:11px"></i> ${info.year}</span>`;
+      extraEl.innerHTML = extras;
+    }
+  });
+}
+
+function runSearch(query) {
+  const q = query.trim();
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('no-results').style.display = 'none';
+
+  if (q.length < 2) {
+    document.getElementById('empty-state').style.display = 'block';
+    return;
+  }
+  if (!loaded) {
+    document.getElementById('status').textContent = 'Cargando catálogo...';
+    return;
+  }
+
+  const books = search(q);
+  if (books.length === 0) {
+    document.getElementById('no-results').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('results-count').textContent = `${books.length} resultado${books.length !== 1 ? 's' : ''}`;
+  document.getElementById('results-query').textContent = `para "${q}"`;
+  document.getElementById('results').style.display = 'block';
+  renderResults(books);
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => runSearch(e.target.value), 350);
+});
+</script>
+</body>
+</html>
