@@ -22,13 +22,17 @@
   header img { height: 40px; width: auto; }
   header span { font-size: 13px; color: var(--muted); }
 
-  .viewport { position: relative; background: #12121e; border-radius: var(--radius-lg); overflow: hidden; height: 42vh; min-height: 240px; max-height: 380px; }
+  .viewport { position: relative; background: #12121e; border-radius: var(--radius-lg); overflow: hidden; height: 46vh; min-height: 240px; max-height: 420px; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .frame { position: absolute; left: 10%; right: 10%; top: 30%; bottom: 30%; border: 2px solid rgba(255,255,255,.85); border-radius: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); pointer-events: none; transition: border-color .2s; }
+  .frame { position: absolute; left: 6%; right: 6%; top: 24%; bottom: 24%; border: 2px solid rgba(255,255,255,.85); border-radius: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); pointer-events: none; transition: border-color .2s; }
   .frame.hit { border-color: #5DCAA5; }
   .line { position: absolute; left: 6%; right: 6%; height: 2px; background: #AFA9EC; top: 50%; animation: scan 2s ease-in-out infinite; }
   @keyframes scan { 0%,100% { top: 15%; } 50% { top: 85%; } }
   .hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff; font-size: 14px; font-weight: 500; text-shadow: 0 1px 3px rgba(0,0,0,.6); padding: 0 16px; }
+  .hint small { font-size: 12px; font-weight: 400; opacity: .9; }
+  .torch { position: absolute; top: 10px; right: 10px; width: 42px; height: 42px; border-radius: 50%; border: none; background: rgba(0,0,0,.45); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .torch svg { width: 22px; height: 22px; }
+  .torch.on { background: #FAC775; color: #1a1a18; }
   .cover-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #ddd; text-align: center; padding: 24px; font-size: 15px; line-height: 1.4; }
   .btn { appearance: none; border: none; border-radius: var(--radius); background: var(--accent); color: #fff; font: 600 16px "DM Sans", sans-serif; padding: 14px 22px; cursor: pointer; }
   .btn.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 500; }
@@ -73,7 +77,8 @@
   <div class="viewport" id="viewport">
     <video id="video" playsinline autoplay muted hidden></video>
     <div class="frame" id="frame" hidden><div class="line"></div></div>
-    <div class="hint" id="hint" hidden>Apunta al código de barras del libro</div>
+    <div class="hint" id="hint" hidden>Pon el código de barras dentro del recuadro.<br><small>Si se ve borroso, aleja un poco el libro.</small></div>
+    <button class="torch" id="btn-torch" hidden aria-label="Linterna"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg></button>
     <div class="cover-msg" id="cam-msg">
       <p id="cam-text">Abriendo la cámara…</p>
       <button class="btn" id="btn-cam" hidden>Activar cámara</button>
@@ -94,7 +99,6 @@
   <footer id="footer">Precios sujetos a confirmación en caja.</footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQ_qp9KAm1Augwa00PtLN0bfayFugg3bEeQ-UYwFNu-VPLV5NsaJi3vqrkKk-4q4N0Sri5d1rFCoE-/pub?gid=1959812276&single=true&output=csv";
 const CACHE_MAX_AGE = 30 * 60 * 1000; // refresca precios si el caché tiene más de 30 min
@@ -253,8 +257,24 @@ async function loadCover(isbn) {
 }
 
 /* ── Cámara ────────────────────────────────────────────── */
-let scanning = false, resumeCam = false, stream = null, lastCode = null, lastTime = 0, zxing = null, detector = null;
+// Solo se analiza la zona del recuadro, ampliada: así el código pequeño de un libro
+// ocupa muchos más píxeles y se lee más rápido. Se valida el dígito de control
+// para descartar lecturas falsas.
+let scanning = false, resumeCam = false, stream = null, track = null, lastCode = null, lastTime = 0, detector = null, frameN = 0;
+let detectorReady = null;
+const crop = document.createElement('canvas');
+const cctx = crop.getContext('2d', { willReadFrequently: true });
+
+function validEAN(code) {
+  if (!/^\d+$/.test(code) || ![8, 12, 13].includes(code.length)) return /^[0-9A-Z\-]{4,}$/i.test(code) && code.length > 13;
+  const d = code.split('').map(Number), check = d.pop();
+  let sum = 0;
+  d.reverse().forEach((n, i) => { sum += n * (i % 2 === 0 ? 3 : 1); });
+  return (10 - (sum % 10)) % 10 === check;
+}
 function onCode(code) {
+  code = String(code).trim();
+  if (!validEAN(code)) return;
   const now = Date.now();
   if (code === lastCode && now - lastTime < 3000) return;
   lastCode = code; lastTime = now;
@@ -262,45 +282,72 @@ function onCode(code) {
   $('frame').classList.add('hit'); setTimeout(() => $('frame').classList.remove('hit'), 400);
   lookup(code);
 }
+// Lector: el nativo del teléfono si sabe leer EAN-13 (Android); si no (iPhone),
+// zxing-cpp compilado a WebAssembly, que lee mucho mejor que la librería anterior.
+const POLYFILL = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/es/ponyfill.js/+esm';
+const FORMATS = ['ean_13', 'ean_8', 'upc_a'];
 async function makeDetector() {
-  if (!('BarcodeDetector' in window)) return null;
+  if ('BarcodeDetector' in window) {
+    try {
+      const f = await BarcodeDetector.getSupportedFormats();
+      if (f.includes('ean_13')) return new BarcodeDetector({ formats: FORMATS.filter(x => f.includes(x)) });
+    } catch (e) {}
+  }
+  const { BarcodeDetector: Poly } = await import(POLYFILL);
+  return new Poly({ formats: FORMATS });
+}
+// Copia al canvas la parte del video que se ve dentro del recuadro (con margen).
+function grabCrop(video) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return false;
+  const W = video.clientWidth, H = video.clientHeight;
+  const s = Math.max(W / vw, H / vh);            // object-fit: cover
+  const visW = W / s, visH = H / s, offX = (vw - visW) / 2, offY = (vh - visH) / 2;
+  const sx = offX + visW * 0.04, sw = visW * 0.92;
+  const sy = offY + visH * 0.22, sh = visH * 0.56;
+  const scale = Math.min(2, 1600 / sw);          // amplía si el recorte es pequeño
+  crop.width = Math.round(sw * scale); crop.height = Math.round(sh * scale);
+  cctx.imageSmoothingEnabled = true;
+  cctx.drawImage(video, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+  return true;
+}
+async function scanLoop(video) {
+  if (!scanning) return;
   try {
-    const f = await BarcodeDetector.getSupportedFormats();
-    if (!f.includes('ean_13')) return null;
-    return new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128'].filter(x => f.includes(x)) });
-  } catch (e) { return null; }
+    if (detector && grabCrop(video)) {
+      frameN++;
+      const r = await detector.detect(crop);
+      if (r.length) onCode(r[0].rawValue);
+      else if (frameN % 4 === 0) { const r2 = await detector.detect(video); if (r2.length) onCode(r2[0].rawValue); }
+    }
+  } catch (e) {}
+  setTimeout(() => requestAnimationFrame(() => scanLoop(video)), 60);
+}
+async function tuneTrack() {
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const adv = [];
+  if (caps.focusMode && caps.focusMode.includes('continuous')) adv.push({ focusMode: 'continuous' });
+  // Un poco de zoom permite sostener el libro más lejos, donde la cámara sí enfoca.
+  if (caps.zoom && caps.zoom.max >= 1.5) adv.push({ zoom: Math.min(2, caps.zoom.max) });
+  for (const a of adv) { try { await track.applyConstraints({ advanced: [a] }); } catch (e) {} }
+  if (caps.torch) $('btn-torch').hidden = false;
 }
 async function startCamera() {
   $('btn-cam').hidden = true;
   $('cam-text').textContent = 'Abriendo la cámara…';
   $('cam-msg').hidden = false;
   try {
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: isIOS ? 1280 : 1920 }, height: { ideal: isIOS ? 720 : 1080 } } });
-    const track = stream.getVideoTracks()[0];
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    if (caps.focusMode && caps.focusMode.includes('continuous')) { try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (e) {} }
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    track = stream.getVideoTracks()[0];
+    await tuneTrack();
     const video = $('video');
     video.srcObject = stream;
     await video.play();
     video.hidden = false; $('frame').hidden = false; $('hint').hidden = false; $('cam-msg').hidden = true;
     scanning = true;
-    detector = await makeDetector();
-    if (detector) {
-      const loop = async () => {
-        if (!scanning) return;
-        try { const r = await detector.detect(video); if (r.length) onCode(r[0].rawValue); } catch (e) {}
-        setTimeout(() => requestAnimationFrame(loop), 120);
-      };
-      loop();
-    } else {
-      zxing = new ZXing.BrowserMultiFormatReader();
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.CODE_128]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxing.hints = hints;
-      zxing.decodeFromStream(stream, video, res => { if (res) onCode(res.getText()); });
-    }
+    await detectorReady;
+    if (!detector) { $('manual').open = true; }
+    scanLoop(video);
   } catch (e) {
     scanning = false;
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
@@ -311,19 +358,27 @@ async function startCamera() {
     if (!denied) $('manual').open = true;
   }
 }
+function stopCamera() {
+  scanning = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; track = null;
+  $('video').hidden = true; $('frame').hidden = true; $('hint').hidden = true; $('btn-torch').hidden = true;
+  $('btn-torch').classList.remove('on');
+}
 $('btn-cam').addEventListener('click', startCamera);
+$('btn-torch').addEventListener('click', async e => {
+  e.stopPropagation();
+  if (!track) return;
+  const on = !$('btn-torch').classList.contains('on');
+  try { await track.applyConstraints({ advanced: [{ torch: on }] }); $('btn-torch').classList.toggle('on', on); } catch (err) {}
+});
 $('viewport').addEventListener('click', async () => {
-  if (!stream) return;
-  const t = stream.getVideoTracks()[0];
-  try { await t.applyConstraints({ advanced: [{ focusMode: 'single' }] }); setTimeout(() => t.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 800); } catch (e) {}
+  if (!track) return;
+  try { await track.applyConstraints({ advanced: [{ focusMode: 'single' }] }); setTimeout(() => track && track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 800); } catch (e) {}
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && stream) {
-    scanning = false; if (zxing) { try { zxing.reset(); } catch (e) {} zxing = null; }
-    stream.getTracks().forEach(t => t.stop()); stream = null;
-    $('video').hidden = true; $('frame').hidden = true; $('hint').hidden = true;
-    resumeCam = true;
-  } else if (!document.hidden && resumeCam && !stream) { resumeCam = false; startCamera(); }
+  if (document.hidden && stream) { stopCamera(); resumeCam = true; }
+  else if (!document.hidden && resumeCam && !stream) { resumeCam = false; startCamera(); }
 });
 
 /* ── Búsqueda manual ───────────────────────────────────── */
@@ -334,6 +389,7 @@ $('form').addEventListener('submit', e => {
   lookup(v); $('code').value = ''; $('code').blur();
 });
 
+detectorReady = makeDetector().then(d => (detector = d)).catch(() => null);
 loadData();
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) startCamera();
 else { $('cam-text').textContent = 'Este navegador no permite usar la cámara. Escribe el ISBN del libro.'; $('manual').open = true; }
